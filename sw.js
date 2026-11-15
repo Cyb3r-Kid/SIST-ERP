@@ -1,0 +1,95 @@
+/**
+ * Sathyabama Student Portal — Progressive Web App Service Worker
+ * Provides offline shell resilience, rapid cached asset loading, and network-first API fetching.
+ * Hardened to prevent stale asset retention and ensure 100% bypass of dynamic/auth routes.
+ */
+
+const CACHE_NAME = 'sathy-portal-v2';
+const STATIC_ASSETS = [
+  '/',
+  '/index.html',
+  '/styles.css',
+  '/app.js',
+  '/portal-api.js',
+  '/manifest.json',
+  '/favicon.png',
+  '/favicon.ico'
+];
+
+// Install: Cache critical static shell
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(STATIC_ASSETS).catch((err) => {
+        console.warn('[SW] Cache pre-fetch error:', err);
+      });
+    }).then(() => self.skipWaiting())
+  );
+});
+
+// Activate: Clean up old cache versions immediately
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            console.log('[SW] Deleting stale cache:', key);
+            return caches.delete(key);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
+});
+
+// Fetch: Network-first for navigation & API routes; Cache-falling-back-to-network for static assets
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  // Security & Freshness: Always bypass cache for API calls, auth routes, non-GET requests, or token headers
+  if (
+    event.request.method !== 'GET' ||
+    url.pathname.startsWith('/api/') ||
+    url.pathname === '/login' ||
+    url.pathname === '/token-login' ||
+    url.pathname === '/health' ||
+    event.request.headers.has('authorization') ||
+    event.request.headers.has('access-token')
+  ) {
+    return;
+  }
+
+  // Network-first strategy for navigation requests (HTML) to ensure users always receive latest deployment
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/index.html')))
+    );
+    return;
+  }
+
+  // Stale-while-revalidate for static assets (styles, scripts, icons)
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      const fetchPromise = fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      }).catch(() => cachedResponse);
+
+      return cachedResponse || fetchPromise;
+    })
+  );
+});
