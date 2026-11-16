@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── WebThreads Shader Component (React Bits Adaptation for Vanilla WebGL2) ────
 function initWebThreads() {
+  return;
   const canvas = document.getElementById('threads-canvas');
   if (!canvas) return;
 
@@ -422,29 +423,143 @@ function toggleMobileSidebar() {
   const sidebar = document.getElementById('mainSidebar');
   const backdrop = document.getElementById('mobileDrawerBackdrop');
   if (!sidebar) return;
-  if (window.innerWidth < 768) {
-    const isShowing = sidebar.style.display === 'flex';
-    if (isShowing) {
-      sidebar.style.display = '';
-      if (backdrop) backdrop.classList.add('hidden');
-    } else {
-      sidebar.style.display = 'flex';
-      sidebar.style.position = 'fixed';
-      sidebar.style.left = '0';
-      sidebar.style.top = '0';
-      sidebar.style.bottom = '0';
-      sidebar.style.zIndex = '50';
-      if (backdrop) backdrop.classList.remove('hidden');
-    }
+  const isOpen = sidebar.classList.contains('mobile-open');
+  if (isOpen) {
+    sidebar.classList.remove('mobile-open');
+    if (backdrop) backdrop.classList.add('hidden');
+    document.body.classList.remove('drawer-open');
+  } else {
+    sidebar.classList.add('mobile-open');
+    if (backdrop) backdrop.classList.remove('hidden');
+    document.body.classList.add('drawer-open');
   }
 }
 
 function closeMobileSidebar() {
   const sidebar = document.getElementById('mainSidebar');
   const backdrop = document.getElementById('mobileDrawerBackdrop');
-  if (window.innerWidth < 768 && sidebar) {
-    sidebar.style.display = '';
-    if (backdrop) backdrop.classList.add('hidden');
+  if (sidebar) {
+    sidebar.classList.remove('mobile-open');
+  }
+  if (backdrop) {
+    backdrop.classList.add('hidden');
+  }
+  document.body.classList.remove('drawer-open');
+}
+
+// ── In-Dashboard Authentication Page Controllers ─────────────────────────────
+function toggleAuthPageTokenVisibility() {
+  const tokenInput = document.getElementById('authPageToken');
+  const icon = document.getElementById('authPageTokenVisibilityIcon');
+  const label = document.getElementById('authPageTokenVisibilityText');
+  if (!tokenInput) return;
+  const isHidden = tokenInput.style.webkitTextSecurity === 'disc';
+  if (isHidden) {
+    tokenInput.style.webkitTextSecurity = 'none';
+    if (icon) icon.textContent = 'visibility_off';
+    if (label) label.textContent = 'Hide';
+  } else {
+    tokenInput.style.webkitTextSecurity = 'disc';
+    if (icon) icon.textContent = 'visibility';
+    if (label) label.textContent = 'Show';
+  }
+}
+
+function clearAuthPageToken() {
+  const tokenInput = document.getElementById('authPageToken');
+  if (tokenInput) {
+    tokenInput.value = '';
+    tokenInput.focus();
+  }
+  const statusEl = document.getElementById('authPageStatusMessage');
+  if (statusEl) {
+    statusEl.className = 'hidden';
+    statusEl.textContent = '';
+  }
+}
+
+async function handleAuthPageConnect() {
+  const tokenInput = document.getElementById('authPageToken');
+  const token = tokenInput?.value?.trim();
+  const statusEl = document.getElementById('authPageStatusMessage');
+  const btn = document.getElementById('authPageConnectBtn');
+
+  if (!token) {
+    if (statusEl) {
+      statusEl.className = 'p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs block mb-4';
+      statusEl.textContent = 'Please enter a valid session Access-Token.';
+    }
+    return;
+  }
+
+  if (statusEl) statusEl.className = 'hidden';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-1.5"></span><span>Verifying with Official ERP...</span>`;
+  }
+
+  try {
+    const regNumber = appState.data?.studentDetails?.regNo || appState.user?.regNo || '';
+    const result = await PortalAPI.loginWithToken(token, regNumber, false);
+
+    appState.user = result.student;
+    appState.data = result.data;
+    appState.calendarMonth = null;
+    appState.calendarYear = null;
+
+    renderHeader();
+    setTab('auth');
+
+    // Display rich verified confirmation banner
+    const newStatusEl = document.getElementById('authPageStatusMessage');
+    if (newStatusEl) {
+      newStatusEl.className = 'p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 block mb-4';
+      newStatusEl.innerHTML = `
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-lg">check_circle</span>
+          <span><strong>Session Connected & Verified:</strong> Authenticated as ${val(result.student?.name || result.student?.regNo)}. All academic records updated.</span>
+        </div>
+        <button onclick="setTab('overview')" class="btn-primary py-1 px-3 text-xs font-semibold flex-shrink-0 self-start sm:self-auto">
+          <span>Go to Overview</span>
+          <span class="material-symbols-outlined text-xs">arrow_forward</span>
+        </button>
+      `;
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.className = 'p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs block mb-4';
+      statusEl.innerHTML = `<strong>Authentication Failed:</strong> ${err.message || 'The session token was rejected by the official ERP gateway.'}`;
+    }
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span class="material-symbols-outlined text-sm">verified_user</span><span>Connect Session</span>`;
+    }
+  }
+}
+
+function handleAuthPageDisconnect() {
+  PortalAPI.clearSession();
+  appState.user = null;
+  appState.data = null;
+  appState.calendarMonth = null;
+  appState.calendarYear = null;
+
+  // Clear header representations
+  const dName = document.getElementById('headerStudentName');
+  const dReg = document.getElementById('headerRegNo');
+  const dBranch = document.getElementById('headerBranch');
+  const dAvatar = document.getElementById('avatarInitials');
+  if (dName) dName.textContent = '--';
+  if (dReg) dReg.textContent = '--';
+  if (dBranch) dBranch.textContent = '--';
+  if (dAvatar) dAvatar.textContent = '--';
+
+  setTab('auth');
+
+  const statusEl = document.getElementById('authPageStatusMessage');
+  if (statusEl) {
+    statusEl.className = 'p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs flex items-center gap-2 block mb-4';
+    statusEl.innerHTML = `<span class="material-symbols-outlined text-base">info</span><span>Session disconnected. All volatile memory tokens cleared. You can paste a fresh token anytime.</span>`;
   }
 }
 
@@ -625,25 +740,7 @@ function showStatus(el, type, msg) {
 
 function animateStudentName(target, name) {
   if (!target || !name || name === '[404]' || name === '—') return;
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const finalStr = String(name);
-  let iter = 0;
-  clearInterval(target._scrambleTimer);
-  target._scrambleTimer = setInterval(() => {
-    target.textContent = finalStr
-      .split('')
-      .map((letter, index) => {
-        if (letter === ' ') return ' ';
-        if (index < iter) return finalStr[index];
-        return chars[Math.floor(Math.random() * chars.length)];
-      })
-      .join('');
-    if (iter >= finalStr.length) {
-      clearInterval(target._scrambleTimer);
-      target.textContent = finalStr;
-    }
-    iter += 1 / 2;
-  }, 25);
+  target.textContent = String(name);
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -677,7 +774,7 @@ function setTab(tab) {
   appState.activeTab = tab;
   closeMobileSidebar();
 
-  const allTabs = ['overview', 'profile', 'attendance', 'cae', 'timetable', 'settings'];
+  const allTabs = ['overview', 'profile', 'attendance', 'cae', 'timetable', 'auth', 'settings'];
   allTabs.forEach(t => {
     // Desktop Tabs
     const b = document.getElementById(`tab-btn-${t}`);
@@ -707,6 +804,7 @@ function setTab(tab) {
       attendance: 'Attendance Tracker',
       cae: 'Academic & CAE Results',
       timetable: 'Class Timetable',
+      auth: 'Authentication & Session Gateway',
       settings: 'Settings'
     };
     bc.textContent = titles[tab] || 'Overview';
@@ -718,6 +816,7 @@ function setTab(tab) {
     attendance: renderAttendance,
     cae: renderCAE,
     timetable: renderTimetable,
+    auth: renderAuth,
     settings: renderSettings
   };
 
@@ -853,7 +952,7 @@ function renderOverview() {
     </div>
 
     <!-- Quick Navigation Shortcuts -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
       <button onclick="setTab('attendance')" class="action-card">
         <div class="action-icon">
           <span class="material-symbols-outlined text-xl">fact_check</span>
@@ -891,6 +990,16 @@ function renderOverview() {
         <div>
           <h4 class="text-xs font-semibold text-primary">My Profile</h4>
           <p class="text-[11px] text-muted">Official dossier data</p>
+        </div>
+      </button>
+
+      <button onclick="setTab('auth')" class="action-card">
+        <div class="action-icon">
+          <span class="material-symbols-outlined text-xl">vpn_key</span>
+        </div>
+        <div>
+          <h4 class="text-xs font-semibold text-primary">Authentication</h4>
+          <p class="text-[11px] text-muted">Session & credentials</p>
         </div>
       </button>
     </div>
@@ -981,6 +1090,206 @@ function renderOverview() {
   `;
 }
 
+// ── Authentication & Session Gateway Tab (In-Dashboard Credentials Management) ──
+function renderAuth() {
+  const activeToken = PortalAPI.getSessionToken();
+  const isConnected = !!(activeToken && (appState.user || appState.data));
+  const s = appState.data?.studentDetails || appState.user || {};
+  const maskedToken = activeToken ? (activeToken.slice(0, 10) + '••••••••' + activeToken.slice(-6)) : '';
+
+  return `
+  <div class="max-w-4xl mx-auto space-y-6">
+    
+    <!-- Top Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-subtle">
+      <div>
+        <h2 class="text-xl sm:text-2xl font-bold text-primary tracking-tight">Authentication & Session Gateway</h2>
+        <p class="text-xs sm:text-sm text-secondary mt-0.5">Manage your official Sathyabama ERP session credentials and gateway connection status.</p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="setTab('overview')" class="btn-secondary text-xs">
+          <span class="material-symbols-outlined text-sm">dashboard</span>
+          <span>Return to Dashboard</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Live Status Banner Container -->
+    <div id="authPageStatusMessage" class="hidden" role="alert"></div>
+
+    <!-- Section 1: Real-Time Connection Status Card -->
+    <div class="glass-card p-6 space-y-5">
+      <div class="flex items-center justify-between pb-3 border-b border-subtle">
+        <div class="space-y-0.5">
+          <h3 class="text-sm font-bold text-primary">Live Connection Status</h3>
+          <p class="text-xs text-muted">Current authentication state with Sathyabama ERP server</p>
+        </div>
+
+        <div>
+          ${isConnected ? `
+            <span class="badge badge-success text-xs py-1 px-3">
+              <span class="pulse-indicator"></span>
+              <span>Connected & Verified</span>
+            </span>
+          ` : `
+            <span class="badge badge-warning text-xs py-1 px-3">
+              <span class="material-symbols-outlined text-xs">warning</span>
+              <span>Not Connected / Session Required</span>
+            </span>
+          `}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+        <div class="p-3.5 rounded-xl bg-surface-elevated/60 border border-subtle space-y-1">
+          <span class="text-muted block text-[10px] uppercase tracking-wider font-semibold">Active Student</span>
+          <span class="font-semibold text-primary block truncate">${val(s.name || 'No Student Active')}</span>
+          <span class="text-[11px] font-mono text-muted block truncate">REG: ${val(s.regNo || '—')}</span>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-surface-elevated/60 border border-subtle space-y-1">
+          <span class="text-muted block text-[10px] uppercase tracking-wider font-semibold">Session Scope</span>
+          <span class="font-semibold text-primary block truncate">Official Student Portal</span>
+          <span class="text-[11px] text-muted block truncate">${val(s.department || s.programme || 'Undergraduate')}</span>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-surface-elevated/60 border border-subtle space-y-1">
+          <span class="text-muted block text-[10px] uppercase tracking-wider font-semibold">Token Security</span>
+          <span class="font-semibold text-emerald-500 block truncate">In-Memory Volatile</span>
+          <span class="text-[11px] text-muted block truncate">CWE-312 Certified (0-Disk)</span>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-surface-elevated/60 border border-subtle space-y-1">
+          <span class="text-muted block text-[10px] uppercase tracking-wider font-semibold">Active Token Footprint</span>
+          <span class="font-mono text-primary block truncate font-medium">${maskedToken || 'None Connected'}</span>
+          <span class="text-[11px] text-muted block truncate">${activeToken ? 'Bearer Auth Active' : 'Waiting for Token'}</span>
+        </div>
+      </div>
+
+      ${isConnected ? `
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-subtle text-xs">
+          <span class="text-muted flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-emerald-500 text-sm">lock</span>
+            <span>Your session is securely active and transmitting official Bearer requests.</span>
+          </span>
+
+          <button type="button" onclick="handleAuthPageDisconnect()"
+                  class="btn-secondary py-1.5 px-3 text-xs font-semibold text-red-500 hover:bg-red-500/10 hover:border-red-500/30 flex items-center gap-1.5 transition-all">
+            <span class="material-symbols-outlined text-sm">link_off</span>
+            <span>Disconnect Session</span>
+          </button>
+        </div>
+      ` : ''}
+    </div>
+
+    <!-- Section 2: Access-Token Management Form -->
+    <div class="glass-card p-6 space-y-5">
+      <div class="space-y-1">
+        <h3 class="text-sm font-bold text-primary">${isConnected ? 'Replace or Refresh Session Token' : 'Connect Your ERP Session Token'}</h3>
+        <p class="text-xs text-secondary leading-relaxed">
+          Enter or paste your active Sathyabama ERP session token to ${isConnected ? 'update your credentials or switch student accounts' : 'authenticate your companion dashboard'}.
+        </p>
+      </div>
+
+      <form onsubmit="event.preventDefault(); handleAuthPageConnect();" class="space-y-4">
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label for="authPageToken" class="block text-xs font-semibold text-secondary uppercase tracking-wider">
+              Access-Token String <span class="text-red-500">*</span>
+            </label>
+            <button type="button" onclick="toggleAuthPageTokenVisibility()" id="toggleAuthPageTokenVisibilityBtn"
+                    class="text-[11px] font-medium text-blue-500 hover:text-blue-400 flex items-center gap-1 transition-colors">
+              <span class="material-symbols-outlined text-sm" id="authPageTokenVisibilityIcon">visibility</span>
+              <span id="authPageTokenVisibilityText">Show</span>
+            </button>
+          </div>
+
+          <div class="relative glass-input rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30">
+            <textarea id="authPageToken" rows="3" placeholder="Paste your Access-Token from erp.sathyabama.ac.in here..."
+                      spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" required
+                      class="w-full bg-transparent p-3 text-xs sm:text-sm font-mono text-primary placeholder-gray-500 focus:outline-none resize-none leading-relaxed"></textarea>
+          </div>
+          <p class="text-[11px] text-muted mt-1.5 flex items-center gap-1">
+            <span class="material-symbols-outlined text-xs">info</span>
+            Token format: JSON Web Token (JWT) or official Bearer hash issued by Sathyabama University.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5 pt-1">
+          <button type="button" onclick="clearAuthPageToken()"
+                  class="btn-secondary py-2.5 px-4 text-xs font-semibold text-secondary hover:text-primary">
+            <span class="material-symbols-outlined text-sm">backspace</span>
+            <span>Clear Input</span>
+          </button>
+
+          <button type="submit" id="authPageConnectBtn"
+                  class="btn-primary py-2.5 px-5 text-xs font-semibold flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">verified_user</span>
+            <span>${isConnected ? 'Update / Connect Session' : 'Connect Session'}</span>
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Section 3: Official Token Retrieval Guide -->
+    <div class="glass-card p-6 space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-subtle">
+        <div class="space-y-0.5">
+          <h3 class="text-sm font-bold text-primary">How to Obtain Your ERP Session Token</h3>
+          <p class="text-xs text-muted">Follow these simple steps in any desktop or mobile browser</p>
+        </div>
+        <a href="https://erp.sathyabama.ac.in/" target="_blank" rel="noopener noreferrer"
+           class="btn-secondary py-1.5 px-3 text-xs font-semibold text-blue-500 hover:text-blue-400 flex items-center gap-1.5">
+          <span>Open ERP Portal</span>
+          <span class="material-symbols-outlined text-xs">open_in_new</span>
+        </a>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+        <div class="p-3.5 rounded-xl bg-surface-elevated/40 border border-subtle space-y-1.5">
+          <div class="w-6 h-6 rounded-full bg-blue-500/10 text-blue-500 font-bold text-xs flex items-center justify-center">1</div>
+          <h4 class="font-semibold text-primary">Sign in on Official Portal</h4>
+          <p class="text-muted leading-relaxed">Log in to <code class="code-pill text-[10px]">erp.sathyabama.ac.in</code> with your Register Number, Password, and complete Cloudflare verification.</p>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-surface-elevated/40 border border-subtle space-y-1.5">
+          <div class="w-6 h-6 rounded-full bg-blue-500/10 text-blue-500 font-bold text-xs flex items-center justify-center">2</div>
+          <h4 class="font-semibold text-primary">Open Browser Storage</h4>
+          <p class="text-muted leading-relaxed">Press <kbd class="code-pill text-[10px]">F12</kbd> (or use mobile developer inspection) &gt; Go to <strong>Application</strong> &gt; <strong>Local Storage</strong> &gt; <code class="code-pill text-[10px]">erp.sathyabama.ac.in</code>.</p>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-surface-elevated/40 border border-subtle space-y-1.5">
+          <div class="w-6 h-6 rounded-full bg-blue-500/10 text-blue-500 font-bold text-xs flex items-center justify-center">3</div>
+          <h4 class="font-semibold text-primary">Copy &amp; Connect</h4>
+          <p class="text-muted leading-relaxed">Double-click the value of the <code class="code-pill text-[10px]">Access-Token</code> key, copy it to your clipboard, and paste it into the field above.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 4: Security & Privacy Compliance Callout -->
+    <div class="p-5 rounded-2xl bg-surface-elevated/50 border border-subtle space-y-3">
+      <div class="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
+        <span class="material-symbols-outlined text-blue-500 text-base">shield</span>
+        <span>Security &amp; Privacy Architecture</span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-secondary leading-relaxed">
+        <div class="space-y-1">
+          <p><strong>Private Credential:</strong> Your Access-Token acts as an official session signature. It is strictly used in Authorization headers sent to Sathyabama API servers.</p>
+          <p><strong>Zero-Disk Retention:</strong> The token resides exclusively in volatile JavaScript memory and is never saved to localStorage, cookies, or browser caches.</p>
+        </div>
+        <div class="space-y-1">
+          <p><strong>Full Confidentiality:</strong> Tokens are never logged to console, never committed to repositories, and never forwarded to third parties.</p>
+          <p><strong>Safe Termination:</strong> Clicking "Disconnect Session" instantly purges the credential from runtime memory, immediately revoking local access.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  `;
+}
+
 // ── Settings Tab (Visual Preferences, Gateway Diagnostics & Security) ─────────
 function renderSettings() {
   const isDark = document.documentElement.classList.contains('dark');
@@ -1016,7 +1325,21 @@ function renderSettings() {
       </div>
     </div>
 
-    <!-- Card 2: ERP Gateway & Connection Status -->
+    <!-- Card 2: Authentication & Gateway Management -->
+    <div class="glass-card p-6 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h3 class="text-sm font-bold text-primary">Active Session & Token Gateway</h3>
+          <p class="text-xs text-muted">Inspect or replace your volatile Access-Token, re-test connection status, or view token guides.</p>
+        </div>
+        <button type="button" onclick="setTab('auth')" class="btn-secondary text-xs font-semibold self-start sm:self-auto">
+          <span class="material-symbols-outlined text-sm">vpn_key</span>
+          <span>Open Authentication Gateway</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Card 3: ERP Gateway & Connection Status -->
     <div class="glass-card p-6 space-y-4">
       <div>
         <h3 class="text-sm font-bold text-primary">Official ERP Gateway Status</h3>
@@ -1197,107 +1520,115 @@ function parseLogDate(dateStr) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// ── Profile Tab (Minimalist & Dynamic with Clean Fallback) ────────────────────
+// ── Profile Tab (Refined Academic Dossier) ───────────────────────────────────
 function renderProfile() {
-  const s = appState.data.studentDetails;
+  const s = appState.data?.studentDetails || {};
 
   return `
-  <div class="tab-content space-y-8">
+  <div class="tab-content space-y-6">
     
-    <!-- Top Minimal Header Card -->
-    <div class="glass-card rounded-xl p-6 border border-white/10">
+    <!-- Top Academic Profile Banner -->
+    <div class="glass-card rounded-xl p-5 sm:p-6 border-subtle">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 id="profileStudentName" class="text-2xl font-bold text-white tracking-tight uppercase">${val(s.name)}</h2>
-          <p class="text-sm font-semibold text-blue-400 mt-1">${val(s.programme)}</p>
-          <p class="text-xs text-gray-400 mt-0.5">${val(s.email)}</p>
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-lg bg-blue-500/10 text-blue-500 font-bold text-base flex items-center justify-center flex-shrink-0">
+            ${(s.name && s.name !== '[404]' && s.name !== '—') ? s.name.split(' ').map(n=>n[0]).join('').slice(0,2) : 'S'}
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 id="profileStudentName" class="text-xl sm:text-2xl font-bold text-primary tracking-tight">${val(s.name)}</h2>
+              <span class="badge badge-success text-[10px]">Verified Student</span>
+            </div>
+            <p class="text-xs sm:text-sm font-medium text-blue-500 mt-0.5">${val(s.programme)}</p>
+            <p class="text-xs text-muted mt-0.5">${val(s.email || s.studentEmail)}</p>
+          </div>
         </div>
         <div class="text-left sm:text-right text-xs space-y-1">
-          <div><span class="text-gray-400">Register No:</span> <span class="text-white font-mono font-bold">${val(s.regNo)}</span></div>
-          <div><span class="text-gray-400">Section:</span> <span class="text-white font-semibold">${val(s.section)}</span></div>
-          <div><span class="text-gray-400">School:</span> <span class="text-white font-semibold">${val(s.school)}</span></div>
+          <div><span class="text-muted">Register No:</span> <span class="text-primary font-mono font-bold">${val(s.regNo)}</span></div>
+          <div><span class="text-muted">Section:</span> <span class="text-primary font-semibold">${val(s.section)}</span></div>
+          <div><span class="text-muted">School:</span> <span class="text-primary font-semibold">${val(s.school)}</span></div>
         </div>
       </div>
     </div>
 
     <!-- Main Content Layout -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
       <!-- Left Academic Info -->
-      <div class="lg:col-span-4 glass-card rounded-xl p-6 border border-white/10 space-y-3 text-xs">
-        <h3 class="text-xs font-bold text-gray-300 uppercase tracking-widest pb-2 border-b border-white/10 mb-2">ACADEMIC SUMMARY</h3>
-        <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Roll Number</span><span class="text-white font-mono">${val(s.rollNumber)}</span></div>
-        <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Date of Birth</span><span class="text-white">${val(s.dob)}</span></div>
-        <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Mobile</span><span class="text-white">${val(s.mobile)}</span></div>
-        <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Age</span><span class="text-white">${val(s.age)}</span></div>
-        <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Batch</span><span class="text-white">${val(s.batch)}</span></div>
-        <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Semester</span><span class="text-white">${val(s.semester)}</span></div>
-        <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Year</span><span class="text-white">${val(s.yearDisplay)}</span></div>
-        <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Section Name</span><span class="text-white">${val(s.section)}</span></div>
-        <div class="flex justify-between py-1"><span class="text-gray-400">School</span><span class="text-white">${val(s.school)}</span></div>
+      <div class="lg:col-span-4 glass-card rounded-xl p-5 border-subtle space-y-3 text-xs">
+        <h3 class="text-xs font-bold text-secondary uppercase tracking-wider pb-2 border-b border-subtle">ACADEMIC SUMMARY</h3>
+        <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Roll Number</span><span class="text-primary font-mono font-medium">${val(s.rollNumber)}</span></div>
+        <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Date of Birth</span><span class="text-primary font-medium">${val(s.dob)}</span></div>
+        <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Mobile</span><span class="text-primary font-medium">${val(s.mobile)}</span></div>
+        <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Age</span><span class="text-primary font-medium">${val(s.age)}</span></div>
+        <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Batch</span><span class="text-primary font-medium">${val(s.batch)}</span></div>
+        <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Semester</span><span class="text-primary font-medium">${val(s.semester)}</span></div>
+        <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Year</span><span class="text-primary font-medium">${val(s.yearDisplay)}</span></div>
+        <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Section Name</span><span class="text-primary font-medium">${val(s.section)}</span></div>
+        <div class="flex justify-between py-1.5"><span class="text-muted">School</span><span class="text-primary font-medium">${val(s.school)}</span></div>
       </div>
 
       <!-- Right Personal & Family Info -->
-      <div class="lg:col-span-8 space-y-8">
+      <div class="lg:col-span-8 space-y-6">
 
         <!-- Personal Details -->
-        <div class="glass-card rounded-xl p-6 border border-white/10">
-          <h3 class="text-xs font-bold text-gray-300 uppercase tracking-widest pb-3 border-b border-white/10 mb-4">PERSONAL DETAILS</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
-            <div><span class="text-gray-400 block mb-0.5">Name</span><span class="text-white font-semibold">${val(s.name)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Gender</span><span class="text-white font-semibold">${val(s.gender)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Blood Group</span><span class="text-white font-semibold">${val(s.bloodGroup)}</span></div>
+        <div class="glass-card rounded-xl p-5 border-subtle">
+          <h3 class="text-xs font-bold text-secondary uppercase tracking-wider pb-2.5 border-b border-subtle mb-3">PERSONAL DETAILS</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 text-xs">
+            <div><span class="text-muted block mb-0.5">Name</span><span class="text-primary font-semibold">${val(s.name)}</span></div>
+            <div><span class="text-muted block mb-0.5">Gender</span><span class="text-primary font-semibold">${val(s.gender)}</span></div>
+            <div><span class="text-muted block mb-0.5">Blood Group</span><span class="text-primary font-semibold">${val(s.bloodGroup)}</span></div>
 
-            <div><span class="text-gray-400 block mb-0.5">Medical History</span><span class="text-white font-semibold">${val(s.medicalHistory)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Native State</span><span class="text-white font-semibold">${val(s.nativeState)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Height</span><span class="text-white font-semibold">${val(s.height)}</span></div>
+            <div><span class="text-muted block mb-0.5">Medical History</span><span class="text-primary font-semibold">${val(s.medicalHistory)}</span></div>
+            <div><span class="text-muted block mb-0.5">Native State</span><span class="text-primary font-semibold">${val(s.nativeState)}</span></div>
+            <div><span class="text-muted block mb-0.5">Height</span><span class="text-primary font-semibold">${val(s.height)}</span></div>
 
-            <div><span class="text-gray-400 block mb-0.5">Date Of Birth</span><span class="text-white font-semibold">${val(s.dob)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Nationality</span><span class="text-white font-semibold">${val(s.nationality)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Religion</span><span class="text-white font-semibold">${val(s.religion)}</span></div>
+            <div><span class="text-muted block mb-0.5">Date Of Birth</span><span class="text-primary font-semibold">${val(s.dob)}</span></div>
+            <div><span class="text-muted block mb-0.5">Nationality</span><span class="text-primary font-semibold">${val(s.nationality)}</span></div>
+            <div><span class="text-muted block mb-0.5">Religion</span><span class="text-primary font-semibold">${val(s.religion)}</span></div>
 
-            <div><span class="text-gray-400 block mb-0.5">Community</span><span class="text-white font-semibold">${val(s.community)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Mother Tongue</span><span class="text-white font-semibold">${val(s.motherTongue)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Stayed in Hostel?</span><span class="text-white font-semibold">${val(s.stayedInHostel)}</span></div>
+            <div><span class="text-muted block mb-0.5">Community</span><span class="text-primary font-semibold">${val(s.community)}</span></div>
+            <div><span class="text-muted block mb-0.5">Mother Tongue</span><span class="text-primary font-semibold">${val(s.motherTongue)}</span></div>
+            <div><span class="text-muted block mb-0.5">Stayed in Hostel?</span><span class="text-primary font-semibold">${val(s.stayedInHostel)}</span></div>
 
-            <div><span class="text-gray-400 block mb-0.5">Native Place</span><span class="text-white font-semibold">${val(s.nativePlace)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Weight</span><span class="text-white font-semibold">${val(s.weight)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Aadhaar</span><span class="text-white font-semibold">${val(s.aadhaar)}</span></div>
+            <div><span class="text-muted block mb-0.5">Native Place</span><span class="text-primary font-semibold">${val(s.nativePlace)}</span></div>
+            <div><span class="text-muted block mb-0.5">Weight</span><span class="text-primary font-semibold">${val(s.weight)}</span></div>
+            <div><span class="text-muted block mb-0.5">Aadhaar</span><span class="text-primary font-semibold">${val(s.aadhaar)}</span></div>
 
-            <div><span class="text-gray-400 block mb-0.5">Mother Name</span><span class="text-white font-semibold">${val(s.motherName)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Student Mobile No</span><span class="text-white font-semibold">${val(s.studentMobile)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Student Email</span><span class="text-white font-semibold truncate block">${val(s.studentEmail)}</span></div>
+            <div><span class="text-muted block mb-0.5">Mother Name</span><span class="text-primary font-semibold">${val(s.motherName)}</span></div>
+            <div><span class="text-muted block mb-0.5">Student Mobile No</span><span class="text-primary font-semibold">${val(s.studentMobile)}</span></div>
+            <div><span class="text-muted block mb-0.5">Student Email</span><span class="text-primary font-semibold truncate block">${val(s.studentEmail)}</span></div>
 
-            <div><span class="text-gray-400 block mb-0.5">First Graduate</span><span class="text-white font-semibold">${val(s.firstGraduate)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">Extra Curricular</span><span class="text-white font-semibold">${val(s.extraCurricular)}</span></div>
-            <div><span class="text-gray-400 block mb-0.5">IsPWD</span><span class="text-white font-semibold">${val(s.isPwd)}</span></div>
+            <div><span class="text-muted block mb-0.5">First Graduate</span><span class="text-primary font-semibold">${val(s.firstGraduate)}</span></div>
+            <div><span class="text-muted block mb-0.5">Extra Curricular</span><span class="text-primary font-semibold">${val(s.extraCurricular)}</span></div>
+            <div><span class="text-muted block mb-0.5">IsPWD</span><span class="text-primary font-semibold">${val(s.isPwd)}</span></div>
           </div>
         </div>
 
         <!-- Family Details Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
           <!-- Father Card -->
-          <div class="glass-card rounded-xl p-5 border border-white/10 space-y-2">
-            <h4 class="text-xs font-bold text-gray-300 uppercase tracking-widest pb-2 border-b border-white/10">FATHER DETAILS</h4>
-            <div class="pt-1"><span class="text-gray-400 block mb-0.5">Father Name</span><span class="text-white font-bold text-sm">${val(s.fatherName)}</span></div>
-            <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Occupation</span><span class="text-white">${val(s.fatherOccupation)}</span></div>
-            <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Office Designation</span><span class="text-white">${val(s.fatherOfficeDesignation)}</span></div>
-            <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Annual Income</span><span class="text-white">${val(s.fatherAnnualIncome)}</span></div>
-            <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Aadhaar</span><span class="text-white font-mono">${val(s.fatherAadhaar)}</span></div>
-            <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Email</span><span class="text-white">${val(s.fatherEmail)}</span></div>
-            <div class="flex justify-between py-1"><span class="text-gray-400">Mobile</span><span class="text-white">${val(s.fatherMobile)}</span></div>
+          <div class="glass-card rounded-xl p-4 sm:p-5 border-subtle space-y-2">
+            <h4 class="text-xs font-bold text-secondary uppercase tracking-wider pb-2 border-b border-subtle">FATHER DETAILS</h4>
+            <div class="pt-0.5"><span class="text-muted block mb-0.5">Father Name</span><span class="text-primary font-bold text-sm">${val(s.fatherName)}</span></div>
+            <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Occupation</span><span class="text-primary font-medium">${val(s.fatherOccupation)}</span></div>
+            <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Office Designation</span><span class="text-primary font-medium">${val(s.fatherOfficeDesignation)}</span></div>
+            <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Annual Income</span><span class="text-primary font-medium">${val(s.fatherAnnualIncome)}</span></div>
+            <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Aadhaar</span><span class="text-primary font-mono">${val(s.fatherAadhaar)}</span></div>
+            <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Email</span><span class="text-primary font-medium">${val(s.fatherEmail)}</span></div>
+            <div class="flex justify-between py-1.5"><span class="text-muted">Mobile</span><span class="text-primary font-medium">${val(s.fatherMobile)}</span></div>
           </div>
 
           <!-- Mother Card -->
-          <div class="glass-card rounded-xl p-5 border border-white/10 space-y-2">
-            <h4 class="text-xs font-bold text-gray-300 uppercase tracking-widest pb-2 border-b border-white/10">MOTHER DETAILS</h4>
-            <div class="pt-1"><span class="text-gray-400 block mb-0.5">Mother Name</span><span class="text-white font-bold text-sm">${val(s.motherName)}</span></div>
-            <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Occupation</span><span class="text-white">${val(s.motherOccupation)}</span></div>
-            <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Office Designation</span><span class="text-white">${val(s.motherOfficeDesignation)}</span></div>
-            <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Annual Income</span><span class="text-white">${val(s.motherAnnualIncome)}</span></div>
-            <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Aadhaar</span><span class="text-white font-mono">${val(s.motherAadhaar)}</span></div>
-            <div class="flex justify-between py-1 border-b border-white/5"><span class="text-gray-400">Email</span><span class="text-white">${val(s.motherEmail)}</span></div>
-            <div class="flex justify-between py-1"><span class="text-gray-400">Mobile</span><span class="text-white">${val(s.motherMobile)}</span></div>
+          <div class="glass-card rounded-xl p-4 sm:p-5 border-subtle space-y-2">
+            <h4 class="text-xs font-bold text-secondary uppercase tracking-wider pb-2 border-b border-subtle">MOTHER DETAILS</h4>
+            <div class="pt-0.5"><span class="text-muted block mb-0.5">Mother Name</span><span class="text-primary font-bold text-sm">${val(s.motherName)}</span></div>
+            <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Occupation</span><span class="text-primary font-medium">${val(s.motherOccupation)}</span></div>
+            <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Office Designation</span><span class="text-primary font-medium">${val(s.motherOfficeDesignation)}</span></div>
+            <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Annual Income</span><span class="text-primary font-medium">${val(s.motherAnnualIncome)}</span></div>
+            <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Aadhaar</span><span class="text-primary font-mono">${val(s.motherAadhaar)}</span></div>
+            <div class="flex justify-between py-1.5 border-b border-subtle"><span class="text-muted">Email</span><span class="text-primary font-medium">${val(s.motherEmail)}</span></div>
+            <div class="flex justify-between py-1.5"><span class="text-muted">Mobile</span><span class="text-primary font-medium">${val(s.motherMobile)}</span></div>
           </div>
         </div>
 
@@ -2690,50 +3021,50 @@ function renderAttendanceCalculatorView(parsedLogs, enrichedTt, minDate, maxDate
 
 // ── CAE Results Tab ───────────────────────────────────────────────────────────
 function renderCAE() {
-  const c = appState.data.caeResults;
+  const c = appState.data?.caeResults || { arrearDetails: { totalArrears: 0 }, cae1: [], cae2: [] };
   const tbl = (rows, label) => `
-    <div class="glass-card rounded-2xl p-4 sm:p-6 border border-white/10">
-      <h3 class="text-sm sm:text-base font-bold text-white mb-3 sm:mb-4 flex items-center justify-between">
-        <span class="flex items-center gap-2"><span class="material-symbols-outlined text-blue-400 text-lg">assignment</span> ${label}</span>
+    <div class="glass-card rounded-xl p-4 sm:p-6 border-subtle">
+      <h3 class="text-sm sm:text-base font-bold text-primary mb-3 sm:mb-4 flex items-center justify-between">
+        <span class="flex items-center gap-2"><span class="material-symbols-outlined text-blue-500 text-lg">assignment</span> ${label}</span>
       </h3>
-      ${rows.length === 0
-        ? `<p class="text-gray-400 text-xs sm:text-sm text-center py-4">No data returned from portal for this exam.</p>`
+      ${!rows || rows.length === 0
+        ? `<div class="p-8 text-center text-xs text-muted rounded-lg bg-surface-elevated/40 border border-subtle">No official exam marks recorded for this assessment cycle.</div>`
         : `
         <!-- Mobile Card List View (sm:hidden) -->
         <div class="sm:hidden space-y-2.5">
           ${rows.map(r => `
-          <div class="glass-card rounded-xl p-3 border border-white/5 space-y-2">
+          <div class="p-3 rounded-lg bg-surface-elevated/60 border border-subtle space-y-2">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0 flex-1">
-                <h4 class="text-xs font-bold text-white leading-snug">${esc(r.name)}</h4>
-                <span class="text-[10px] text-blue-400 font-mono">${esc(r.code)}</span>
+                <h4 class="text-xs font-bold text-primary leading-snug">${esc(r.name)}</h4>
+                <span class="text-[10px] text-blue-500 font-mono font-medium">${esc(r.code)}</span>
               </div>
-              <span class="badge-pill text-[10px] px-2 py-0.5 flex-shrink-0 ${r.status==='PASS'?'badge-pass':'badge-warning'}">${esc(r.status)}</span>
+              <span class="badge ${r.status==='PASS'?'badge-success':'badge-warning'} text-[10px]">${esc(r.status)}</span>
             </div>
-            <div class="flex items-center justify-between text-xs pt-1 border-t border-white/5">
-              <span class="text-gray-400 text-[11px]">Marks Scored</span>
+            <div class="flex items-center justify-between text-xs pt-1.5 border-t border-subtle">
+              <span class="text-muted text-[11px]">Marks Scored</span>
               <div class="flex items-baseline gap-1 font-mono">
-                <span class="text-base font-black ${r.status==='PASS'?'text-emerald-400':'text-amber-400'}">${Number(r.marksObtained) || 0}</span>
-                <span class="text-[11px] text-gray-500">/ ${Number(r.maxMarks) || 0}</span>
+                <span class="text-base font-bold ${r.status==='PASS'?'text-emerald-500':'text-amber-500'}">${Number(r.marksObtained) || 0}</span>
+                <span class="text-[11px] text-muted">/ ${Number(r.maxMarks) || 0}</span>
               </div>
             </div>
           </div>`).join('')}
         </div>
 
         <!-- Desktop Table View (hidden sm:block) -->
-        <div class="hidden sm:block overflow-x-auto">
-          <table class="w-full text-left text-sm text-gray-300">
-            <thead class="bg-white/5 text-gray-400 text-xs uppercase">
-              <tr><th class="p-3">Code</th><th class="p-3">Subject</th><th class="p-3">Max</th><th class="p-3">Obtained</th><th class="p-3">Result</th></tr>
+        <div class="hidden sm:block table-container">
+          <table class="table-modern">
+            <thead>
+              <tr><th>Code</th><th>Subject Title</th><th>Max</th><th>Obtained</th><th>Status</th></tr>
             </thead>
-            <tbody class="divide-y divide-white/5">
+            <tbody>
               ${rows.map(r=>`
-              <tr class="hover:bg-white/5 transition-colors">
-                <td class="p-3 text-blue-400 font-semibold">${esc(r.code)}</td>
-                <td class="p-3 text-white font-medium">${esc(r.name)}</td>
-                <td class="p-3">${Number(r.maxMarks) || 0}</td>
-                <td class="p-3 font-bold text-white">${Number(r.marksObtained) || 0}</td>
-                <td class="p-3"><span class="badge-pill ${r.status==='PASS'?'badge-pass':'badge-warning'}">${esc(r.status)}</span></td>
+              <tr>
+                <td class="text-blue-500 font-mono font-semibold">${esc(r.code)}</td>
+                <td class="font-medium text-primary">${esc(r.name)}</td>
+                <td>${Number(r.maxMarks) || 0}</td>
+                <td class="font-bold text-primary">${Number(r.marksObtained) || 0}</td>
+                <td><span class="badge ${r.status==='PASS'?'badge-success':'badge-warning'}">${esc(r.status)}</span></td>
               </tr>`).join('')}
             </tbody>
           </table>
@@ -2741,19 +3072,19 @@ function renderCAE() {
     </div>`;
   return `
   <div class="tab-content space-y-6">
-    ${c.arrearDetails.totalArrears > 0 ? `
-    <div class="glass-card rounded-2xl p-5 flex items-center gap-4 border border-amber-500/30 bg-amber-500/5">
-      <span class="text-2xl">⚠️</span>
+    ${c.arrearDetails?.totalArrears > 0 ? `
+    <div class="glass-card rounded-xl p-4 sm:p-5 flex items-center gap-3.5 border-amber-500/20 bg-amber-500/5">
+      <span class="material-symbols-outlined text-amber-500 text-2xl flex-shrink-0">warning</span>
       <div>
-        <span class="text-xs text-gray-400 uppercase tracking-wider block">CAE Arrears (CAE 1)</span>
-        <span class="text-white font-bold">${c.arrearDetails.totalArrears} subject(s) below passing marks — ${(c.arrearDetails.history || []).map(esc).join(', ')}</span>
+        <span class="text-[10px] sm:text-xs text-amber-500 uppercase tracking-wider font-semibold block">CAE Arrear Notice</span>
+        <span class="text-xs sm:text-sm text-primary font-medium">${c.arrearDetails.totalArrears} subject(s) below passing marks — ${(c.arrearDetails.history || []).map(esc).join(', ')}</span>
       </div>
     </div>` : `
-    <div class="glass-card rounded-2xl p-5 flex items-center gap-4 border border-emerald-500/30 bg-emerald-500/5">
-      <span class="text-2xl">✅</span>
+    <div class="glass-card rounded-xl p-4 sm:p-5 flex items-center gap-3.5 border-emerald-500/20 bg-emerald-500/5">
+      <span class="material-symbols-outlined text-emerald-500 text-2xl flex-shrink-0">check_circle</span>
       <div>
-        <span class="text-xs text-gray-400 uppercase tracking-wider block">CAE Arrear Status</span>
-        <span class="text-white font-bold">No arrears — All subjects passed in CAE 1</span>
+        <span class="text-[10px] sm:text-xs text-emerald-500 uppercase tracking-wider font-semibold block">Academic Standing</span>
+        <span class="text-xs sm:text-sm text-primary font-medium">All registered subjects cleared with zero arrears.</span>
       </div>
     </div>`}
     ${tbl(c.cae1, 'CAE 1 — Continuous Assessment Examination')}
@@ -3024,21 +3355,21 @@ function renderLiveClassHero(tt, todayName) {
 
   if (!isWeekday) {
     return `
-    <div class="glass-card rounded-2xl p-4 sm:p-5 border border-purple-500/20 bg-gradient-to-r from-purple-500/10 via-blue-500/5 to-transparent flex items-center justify-between gap-4">
+    <div class="glass-card rounded-xl p-4 sm:p-5 border-subtle flex items-center justify-between gap-4">
       <div class="flex items-center gap-3.5 min-w-0">
-        <div class="w-11 h-11 rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-300 flex items-center justify-center flex-shrink-0">
-          <span class="material-symbols-outlined text-2xl">weekend</span>
+        <div class="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center flex-shrink-0">
+          <span class="material-symbols-outlined text-xl">weekend</span>
         </div>
         <div class="min-w-0">
           <div class="flex items-center gap-2">
-            <span class="text-[10px] sm:text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">Weekend</span>
-            <span class="text-xs text-gray-400 font-mono">${todayName}</span>
+            <span class="badge badge-info text-[10px]">Weekend</span>
+            <span class="text-xs text-muted font-mono">${todayName}</span>
           </div>
-          <h4 class="text-sm sm:text-base font-bold text-white mt-0.5">No classes scheduled today!</h4>
-          <p class="text-xs text-gray-400 mt-0.5">Classes resume on Monday morning at 8:30 AM.</p>
+          <h4 class="text-sm sm:text-base font-bold text-primary mt-0.5">No classes scheduled today</h4>
+          <p class="text-xs text-muted mt-0.5">Regular lectures resume on Monday morning at 08:30 AM.</p>
         </div>
       </div>
-      <button onclick="setTimetableDay('Monday')" class="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-gray-300 border border-white/10 flex-shrink-0 hidden sm:flex items-center gap-1.5">
+      <button onclick="setTimetableDay('Monday')" class="btn-secondary text-xs font-semibold flex-shrink-0 hidden sm:flex items-center gap-1.5">
         <span>Monday Schedule</span>
         <span class="material-symbols-outlined text-sm">arrow_forward</span>
       </button>
@@ -3072,17 +3403,14 @@ function renderLiveClassHero(tt, todayName) {
     const nextSlot = parsedSlots.find(s => s.range.start >= activeSlot.range.end);
 
     return `
-    <div class="glass-card rounded-2xl p-4 sm:p-5 border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-emerald-500/[0.03] to-transparent shadow-lg shadow-emerald-950/20 space-y-3">
+    <div class="glass-card rounded-xl p-4 sm:p-5 border-emerald-500/20 bg-emerald-500/5 space-y-3">
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
-          <span class="relative flex h-2.5 w-2.5">
-            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-          </span>
-          <span class="text-[10px] sm:text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Happening Now</span>
-          <span class="text-xs text-gray-400 font-mono hidden xs:inline">• Period ${activeSlot.hour || 'Break'}</span>
+          <span class="pulse-indicator"></span>
+          <span class="badge badge-success text-[10px]">Happening Now</span>
+          <span class="text-xs text-muted font-mono hidden xs:inline">• Period ${activeSlot.hour || 'Break'}</span>
         </div>
-        <span class="text-xs font-bold text-emerald-300 font-mono flex items-center gap-1">
+        <span class="text-xs font-semibold text-emerald-500 font-mono flex items-center gap-1">
           <span class="material-symbols-outlined text-sm">timer</span>
           ${minsLeft} min${minsLeft !== 1 ? 's' : ''} left
         </span>
@@ -3090,18 +3418,18 @@ function renderLiveClassHero(tt, todayName) {
 
       <div class="flex items-start justify-between gap-4">
         <div class="min-w-0 flex-1">
-          <h4 class="text-base sm:text-lg font-bold text-white tracking-wide leading-snug break-words">
+          <h4 class="text-base sm:text-lg font-bold text-primary tracking-wide leading-snug break-words">
             ${esc(title)}
-            ${activeSlot.isLab ? '<span class="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/30 font-mono">[LAB]</span>' : ''}
+            ${activeSlot.isLab ? '<span class="badge badge-warning text-[10px] ml-1.5">[LAB]</span>' : ''}
           </h4>
-          <div class="flex items-center gap-3 mt-1 text-xs text-gray-300 flex-wrap">
+          <div class="flex items-center gap-3 mt-1 text-xs text-secondary flex-wrap">
             ${faculty ? `
             <span class="flex items-center gap-1">
-              <span class="material-symbols-outlined text-sm text-gray-400">person</span>
+              <span class="material-symbols-outlined text-sm text-muted">person</span>
               <span>${esc(faculty)}</span>
             </span>` : ''}
-            <span class="flex items-center gap-1 font-mono text-gray-400">
-              <span class="material-symbols-outlined text-sm text-gray-500">schedule</span>
+            <span class="flex items-center gap-1 font-mono text-muted">
+              <span class="material-symbols-outlined text-sm">schedule</span>
               <span>${esc(activeSlot.time)}</span>
             </span>
           </div>
@@ -3109,9 +3437,9 @@ function renderLiveClassHero(tt, todayName) {
       </div>
 
       ${nextSlot ? `
-      <div class="pt-2 border-t border-white/5 flex items-center justify-between text-xs text-gray-400">
-        <span class="truncate">Next: <strong class="text-gray-200">${esc(formatSubjectName(nextSlot.subjectName))}</strong></span>
-        <span class="font-mono text-[11px] text-gray-500 flex-shrink-0">${esc(nextSlot.time)}</span>
+      <div class="pt-2 border-t border-subtle flex items-center justify-between text-xs text-secondary">
+        <span class="truncate">Next: <strong class="text-primary">${esc(formatSubjectName(nextSlot.subjectName))}</strong></span>
+        <span class="font-mono text-[11px] text-muted flex-shrink-0">${esc(nextSlot.time)}</span>
       </div>` : ''}
     </div>`;
   }
@@ -3131,14 +3459,14 @@ function renderLiveClassHero(tt, todayName) {
       : `Starts at ${formatTo12Hour(nextSlot.time.split('-')[0].trim())}`;
 
     return `
-    <div class="glass-card rounded-2xl p-4 sm:p-5 border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-blue-500/[0.03] to-transparent shadow-lg shadow-blue-950/20 space-y-2.5">
+    <div class="glass-card rounded-xl p-4 sm:p-5 border-blue-500/20 bg-blue-500/5 space-y-2.5">
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-blue-400"></span>
-          <span class="text-[10px] sm:text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">Next Up</span>
-          <span class="text-xs text-gray-400 font-mono hidden xs:inline">• Period ${nextSlot.hour || 'Break'}</span>
+          <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+          <span class="badge badge-info text-[10px]">Next Up</span>
+          <span class="text-xs text-muted font-mono hidden xs:inline">• Period ${nextSlot.hour || 'Break'}</span>
         </div>
-        <span class="text-xs font-semibold text-blue-300 font-mono flex items-center gap-1">
+        <span class="text-xs font-semibold text-blue-500 font-mono flex items-center gap-1">
           <span class="material-symbols-outlined text-sm">schedule</span>
           ${timeDisplay}
         </span>
@@ -3146,18 +3474,18 @@ function renderLiveClassHero(tt, todayName) {
 
       <div class="flex items-start justify-between gap-4">
         <div class="min-w-0 flex-1">
-          <h4 class="text-base sm:text-lg font-bold text-white tracking-wide leading-snug break-words">
+          <h4 class="text-base sm:text-lg font-bold text-primary tracking-wide leading-snug break-words">
             ${esc(title)}
-            ${nextSlot.isLab ? '<span class="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/30 font-mono">[LAB]</span>' : ''}
+            ${nextSlot.isLab ? '<span class="badge badge-warning text-[10px] ml-1.5">[LAB]</span>' : ''}
           </h4>
-          <div class="flex items-center gap-3 mt-1 text-xs text-gray-300 flex-wrap">
+          <div class="flex items-center gap-3 mt-1 text-xs text-secondary flex-wrap">
             ${faculty ? `
             <span class="flex items-center gap-1">
-              <span class="material-symbols-outlined text-sm text-gray-400">person</span>
+              <span class="material-symbols-outlined text-sm text-muted">person</span>
               <span>${esc(faculty)}</span>
             </span>` : ''}
-            <span class="flex items-center gap-1 font-mono text-gray-400">
-              <span class="material-symbols-outlined text-sm text-gray-500">schedule</span>
+            <span class="flex items-center gap-1 font-mono text-muted">
+              <span class="material-symbols-outlined text-sm">schedule</span>
               <span>${esc(nextSlot.time)}</span>
             </span>
           </div>
@@ -3169,15 +3497,15 @@ function renderLiveClassHero(tt, todayName) {
   // 3. Classes finished for today
   if (currentMinutes >= lastSlot.range.end) {
     return `
-    <div class="glass-card rounded-2xl p-4 sm:p-5 border border-white/10 bg-white/[0.02] flex items-center justify-between gap-4">
+    <div class="glass-card rounded-xl p-4 sm:p-5 border-subtle flex items-center justify-between gap-4">
       <div class="flex items-center gap-3.5 min-w-0">
-        <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-center justify-center flex-shrink-0">
+        <div class="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center flex-shrink-0">
           <span class="material-symbols-outlined text-xl">done_all</span>
         </div>
         <div class="min-w-0">
-          <span class="text-[10px] sm:text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Day Complete</span>
-          <h4 class="text-sm sm:text-base font-bold text-white mt-1">All classes wrapped up for ${todayName}! 🎉</h4>
-          <p class="text-xs text-gray-400 mt-0.5">Check tomorrow's schedule or review your attendance tracker.</p>
+          <span class="badge badge-success text-[10px]">Day Complete</span>
+          <h4 class="text-sm sm:text-base font-bold text-primary mt-1">All classes completed for ${todayName}</h4>
+          <p class="text-xs text-muted mt-0.5">Check tomorrow's schedule or review your attendance analytics.</p>
         </div>
       </div>
     </div>`;
@@ -3213,12 +3541,12 @@ function renderTimetable() {
     ${renderLiveClassHero(tt, todayName)}
 
     <!-- Header & View Switcher Bar -->
-    <div class="glass-card rounded-2xl p-4 sm:p-5 border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div class="glass-card rounded-xl p-4 sm:p-5 border-subtle flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div>
         <div class="flex items-center gap-2 flex-wrap">
-          <span class="material-symbols-outlined text-blue-400 text-lg sm:text-xl">event_available</span>
-          <h3 class="text-lg sm:text-xl font-bold text-white tracking-wide">Class Timetable</h3>
-          <span class="text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">Section ${esc(sectionName)}</span>
+          <span class="material-symbols-outlined text-blue-500 text-lg sm:text-xl">event_available</span>
+          <h3 class="text-base sm:text-lg font-bold text-primary tracking-wide">Class Timetable</h3>
+          <span class="badge badge-info text-[10px]">Section ${esc(sectionName)}</span>
         </div>
       </div>
 
@@ -3241,24 +3569,24 @@ function renderTimetable() {
 
     <!-- Course Instructors & Faculty Directory (Clean minimal cards, no subject codes) -->
     ${subjects.length > 0 ? `
-    <div class="space-y-4 pt-2">
+    <div class="space-y-3 pt-2">
       <div class="flex items-center gap-2 px-1">
-        <span class="material-symbols-outlined text-gray-400 text-base">groups</span>
-        <h4 class="text-xs sm:text-sm font-semibold text-gray-300 uppercase tracking-wider">Course Instructors & Faculty</h4>
+        <span class="material-symbols-outlined text-muted text-base">groups</span>
+        <h4 class="text-xs font-semibold text-secondary uppercase tracking-wider">Course Instructors & Faculty</h4>
       </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         ${subjects.map(s => `
-        <div class="glass-card rounded-xl p-3.5 sm:p-4 border border-white/5 hover:border-blue-500/20 transition-all flex items-start gap-3">
-          <div class="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 flex-shrink-0 mt-0.5">
+        <div class="glass-card rounded-lg p-3.5 border-subtle hover:border-blue-500/30 transition-all flex items-start gap-3">
+          <div class="w-8 h-8 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center flex-shrink-0 mt-0.5">
             <span class="material-symbols-outlined text-base">person</span>
           </div>
           <div class="min-w-0 flex-1">
-            <h5 class="text-xs sm:text-sm font-semibold text-white truncate leading-tight">${esc(formatSubjectName(s.subjectName))}</h5>
+            <h5 class="text-xs sm:text-sm font-semibold text-primary truncate leading-tight">${esc(formatSubjectName(s.subjectName))}</h5>
             <div class="flex items-center gap-2 mt-1.5 flex-wrap">
-              <span class="text-[9px] sm:text-[10px] font-semibold px-2 py-0.5 rounded-full ${/practical/i.test(s.subjectType || s.type) ? 'bg-purple-500/15 text-purple-300 border border-purple-500/20' : 'bg-blue-500/15 text-blue-300 border border-blue-500/20'}">
+              <span class="badge ${/practical/i.test(s.subjectType || s.type) ? 'badge-warning' : 'badge-info'} text-[9px]">
                 ${esc(s.subjectType || 'THEORY')}
               </span>
-              <span class="text-[11px] sm:text-xs text-gray-400 truncate">${esc(resolveStaffName(s.subjectName, s.staff))}</span>
+              <span class="text-xs text-muted truncate">${esc(resolveStaffName(s.subjectName, s.staff))}</span>
             </div>
           </div>
         </div>`).join('')}
@@ -3283,7 +3611,7 @@ function renderDayTimeline(tt, days, activeDay, todayName) {
   return `
   <div class="space-y-4">
     <!-- Day Selector Pills (Touch scrollable, no ugly scrollbars) -->
-    <div class="glass-card p-1.5 sm:p-2 rounded-2xl flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar whitespace-nowrap">
+    <div class="glass-card p-1.5 sm:p-2 rounded-xl flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar whitespace-nowrap border-subtle">
       ${days.map(d => {
         const isSelected = d === activeDay;
         const isToday = d === todayName;
@@ -3294,27 +3622,27 @@ function renderDayTimeline(tt, days, activeDay, todayName) {
 
         return `
         <button onclick="setTimetableDay('${esc(d)}')"
-          class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 flex-shrink-0 ${isSelected ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-white/5 text-gray-300 hover:bg-white/10 border border-white/5'}">
+          class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 flex-shrink-0 ${isSelected ? 'bg-blue-600 text-white shadow-sm' : 'bg-surface-elevated text-secondary hover:text-primary border border-subtle'}">
           <div class="flex flex-col items-start text-left">
             <div class="flex items-center gap-1.5">
               <span>${esc(d)}</span>
-              ${isToday ? '<span class="text-[8px] sm:text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/25 text-emerald-300 font-bold border border-emerald-500/30">TODAY</span>' : ''}
+              ${isToday ? '<span class="badge badge-success text-[8px] py-0">TODAY</span>' : ''}
             </div>
-            <span class="text-[9px] sm:text-[10px] font-mono ${isSelected ? 'text-blue-200' : 'text-gray-400'}">${dateLabel}</span>
+            <span class="text-[9px] font-mono ${isSelected ? 'text-blue-100' : 'text-muted'}">${dateLabel}</span>
           </div>
         </button>`;
       }).join('')}
     </div>
 
     <!-- Timeline Slots -->
-    <div class="space-y-3">
+    <div class="space-y-2.5">
       ${daySchedule.length === 0 ? `
-        <div class="glass-card rounded-2xl p-8 sm:p-12 text-center space-y-3 border border-white/10">
-          <div class="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto">
+        <div class="glass-card rounded-xl p-8 sm:p-12 text-center space-y-3 border-subtle">
+          <div class="w-12 h-12 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center mx-auto">
             <span class="material-symbols-outlined text-2xl">event_busy</span>
           </div>
-          <h4 class="text-base sm:text-lg font-bold text-white tracking-tight">No Schedule Available</h4>
-          <p class="text-xs sm:text-sm text-gray-400 max-w-md mx-auto">
+          <h4 class="text-sm sm:text-base font-bold text-primary tracking-tight">No Schedule Available</h4>
+          <p class="text-xs text-muted max-w-md mx-auto">
             ${esc(tt.message || `No classes scheduled for ${activeDay}.`)}
           </p>
         </div>` :
@@ -3325,17 +3653,17 @@ function renderDayTimeline(tt, days, activeDay, todayName) {
               ? (/lunch/i.test(slot.subjectName || '') ? formatSubjectName(slot.subjectName) : 'Lunch Break')
               : (/break|interval/i.test(slot.subjectName || '') ? formatSubjectName(slot.subjectName) : defaultLabel);
             return `
-            <div class="rounded-2xl p-3 sm:p-3.5 px-3 sm:px-4 border border-amber-500/20 bg-amber-500/5 flex items-center justify-between gap-3">
-              <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0 text-amber-400">
-                  <span class="material-symbols-outlined text-base sm:text-lg">${slot.isLunch ? 'restaurant' : 'coffee'}</span>
+            <div class="rounded-lg p-3 px-4 border border-amber-500/20 bg-amber-500/5 flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-8 h-8 rounded-md bg-amber-500/10 flex items-center justify-center flex-shrink-0 text-amber-500">
+                  <span class="material-symbols-outlined text-base">${slot.isLunch ? 'restaurant' : 'coffee'}</span>
                 </div>
                 <div class="min-w-0">
-                  <span class="text-xs sm:text-sm font-semibold text-amber-200 block truncate">${esc(displayTitle)}</span>
-                  <span class="block text-[10px] sm:text-xs text-amber-400/70 mt-0.5">${esc(slot.time || '')}</span>
+                  <span class="text-xs sm:text-sm font-semibold text-primary block truncate">${esc(displayTitle)}</span>
+                  <span class="block text-[11px] text-muted mt-0.5">${esc(slot.time || '')}</span>
                 </div>
               </div>
-              <span class="text-[9px] sm:text-[10px] font-semibold px-2 sm:px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 tracking-wider flex-shrink-0">
+              <span class="badge badge-warning text-[10px]">
                 ${slot.isLunch ? 'LUNCH' : 'BREAK'}
               </span>
             </div>`;
@@ -3343,29 +3671,29 @@ function renderDayTimeline(tt, days, activeDay, todayName) {
 
           const isPractical = slot.type === 'PRACTICAL' || slot.isLab;
           return `
-          <div class="glass-card rounded-2xl p-3.5 sm:p-5 border border-white/10 hover:border-blue-500/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+          <div class="glass-card rounded-lg p-3.5 sm:p-4 border-subtle hover:border-muted transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
             <div class="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0 flex-1">
-              <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${isPractical ? 'bg-purple-500/10 border border-purple-500/20 text-purple-400' : 'bg-blue-500/10 border border-blue-500/20 text-blue-400'} flex flex-col items-center justify-center flex-shrink-0">
-                <span class="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">P${Number(slot.hour) || 1}</span>
-                <span class="material-symbols-outlined text-sm sm:text-base">${isPractical ? 'biotech' : 'school'}</span>
+              <div class="w-9 h-9 rounded-lg ${isPractical ? 'bg-purple-500/10 text-purple-500' : 'bg-blue-500/10 text-blue-500'} flex flex-col items-center justify-center flex-shrink-0">
+                <span class="text-[9px] font-bold uppercase tracking-wider">P${Number(slot.hour) || 1}</span>
+                <span class="material-symbols-outlined text-xs">${isPractical ? 'biotech' : 'school'}</span>
               </div>
               <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap mb-1">
-                  <h4 class="text-sm sm:text-base font-bold text-white tracking-wide leading-snug break-words flex items-center gap-1.5 flex-wrap">
+                <div class="flex items-center gap-2 flex-wrap mb-1">
+                  <h4 class="text-xs sm:text-sm font-bold text-primary tracking-wide leading-snug break-words flex items-center gap-1.5 flex-wrap">
                     <span>${esc(formatSubjectName(slot.subjectName))}</span>
-                    ${slot.isLab ? '<span class="px-2 py-0.5 rounded text-[10px] sm:text-xs font-black bg-purple-500/20 text-purple-300 border border-purple-500/40 font-mono">[LAB]</span>' : ''}
+                    ${slot.isLab ? '<span class="badge badge-warning text-[9px] font-mono">[LAB]</span>' : ''}
                   </h4>
-                  <span class="text-[9px] sm:text-[10px] font-semibold px-2 py-0.5 rounded-full ${isPractical ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'}">
+                  <span class="badge ${isPractical ? 'badge-warning' : 'badge-info'} text-[9px]">
                     ${slot.isLab ? 'LAB' : esc(slot.type || 'THEORY')}
                   </span>
                 </div>
-                <div class="flex items-center gap-3 sm:gap-4 text-[11px] sm:text-xs text-gray-400 flex-wrap">
+                <div class="flex items-center gap-3 text-xs text-muted flex-wrap">
                   <span class="inline-flex items-center gap-1">
-                    <span class="material-symbols-outlined text-sm text-gray-500">person</span>
-                    <span class="text-gray-300 font-medium">${esc(resolveStaffName(slot.subjectName, slot.staff))}</span>
+                    <span class="material-symbols-outlined text-xs text-muted">person</span>
+                    <span class="text-secondary font-medium">${esc(resolveStaffName(slot.subjectName, slot.staff))}</span>
                   </span>
-                  <span class="inline-flex items-center gap-1">
-                    <span class="material-symbols-outlined text-sm text-gray-500">schedule</span>
+                  <span class="inline-flex items-center gap-1 font-mono">
+                    <span class="material-symbols-outlined text-xs text-muted">schedule</span>
                     <span>${esc(slot.time)}</span>
                   </span>
                 </div>
