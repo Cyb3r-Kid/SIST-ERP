@@ -709,3 +709,9 @@ html.light .bg-\[\#1c2028\],
 html.light .bg-\[\#0f131c\] {
   background-color: var(--bg-surface) !important;
 }
+
+/* Token Masking Utility (CWE-312 / Shoulder-Surfing Protection) */
+.token-masked {
+  -webkit-text-security: disc !important;
+  letter-spacing: 0.12em;
+}

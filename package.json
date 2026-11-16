@@ -4,6 +4,8 @@
   "description": "Blazing fast frontend wrapper and REST proxy for Sathyabama Student Portal",
   "main": "server.js",
   "scripts": {
+    "build": "node -e \"const fs=require('fs'); if(!fs.existsSync('public')) fs.mkdirSync('public'); ['index.html','styles.css','app.js','portal-api.js','sw.js','favicon.png','favicon.ico','manifest.json'].forEach(f => { if(fs.existsSync(f)) fs.copyFileSync(f, 'public/' + f); }); console.log('Static assets synced to public/');\"",
+    "pretest": "npm run build",
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node test/suite.js"

@@ -16,6 +16,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const passInput = document.getElementById('password');
     if (passInput) passInput.focus();
   }
+
+  // Synchronize initial theme preference
+  const savedTheme = localStorage.getItem('sist_theme');
+  if (savedTheme === 'light') {
+    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.add('light');
+    const icon = document.getElementById('themeToggleIcon');
+    if (icon) icon.textContent = 'dark_mode';
+  }
 });
 
 // ── WebThreads Shader Component (React Bits Adaptation for Vanilla WebGL2) ────
@@ -367,13 +376,15 @@ function toggleTokenVisibility() {
   const icon = document.getElementById('tokenVisibilityIcon');
   const label = document.getElementById('tokenVisibilityText');
   if (!tokenInput) return;
-  const isHidden = tokenInput.style.webkitTextSecurity === 'disc';
+  const isHidden = tokenInput.style.webkitTextSecurity === 'disc' || tokenInput.classList.contains('token-masked');
   if (isHidden) {
     tokenInput.style.webkitTextSecurity = 'none';
+    tokenInput.classList.remove('token-masked');
     if (icon) icon.textContent = 'visibility_off';
     if (label) label.textContent = 'Hide';
   } else {
     tokenInput.style.webkitTextSecurity = 'disc';
+    tokenInput.classList.add('token-masked');
     if (icon) icon.textContent = 'visibility';
     if (label) label.textContent = 'Show';
   }
@@ -453,13 +464,15 @@ function toggleAuthPageTokenVisibility() {
   const icon = document.getElementById('authPageTokenVisibilityIcon');
   const label = document.getElementById('authPageTokenVisibilityText');
   if (!tokenInput) return;
-  const isHidden = tokenInput.style.webkitTextSecurity === 'disc';
+  const isHidden = tokenInput.style.webkitTextSecurity === 'disc' || tokenInput.classList.contains('token-masked');
   if (isHidden) {
     tokenInput.style.webkitTextSecurity = 'none';
+    tokenInput.classList.remove('token-masked');
     if (icon) icon.textContent = 'visibility_off';
     if (label) label.textContent = 'Hide';
   } else {
     tokenInput.style.webkitTextSecurity = 'disc';
+    tokenInput.classList.add('token-masked');
     if (icon) icon.textContent = 'visibility';
     if (label) label.textContent = 'Show';
   }
@@ -605,7 +618,8 @@ function toggleTokenLoginForm() {
   }
 }
 
-async function handleTokenLoginSubmit() {
+async function handleTokenLoginSubmit(e) {
+  if (e && e.preventDefault) e.preventDefault();
   const tokenInput = document.getElementById('sessionToken');
   const token = tokenInput?.value?.trim();
   const regNumber = document.getElementById('regNumber')?.value?.trim() || '';
@@ -1208,7 +1222,8 @@ function renderAuth() {
           <div class="relative glass-input rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30">
             <textarea id="authPageToken" rows="3" placeholder="Paste your Access-Token from erp.sathyabama.ac.in here..."
                       spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" required
-                      class="w-full bg-transparent p-3 text-xs sm:text-sm font-mono text-primary placeholder-gray-500 focus:outline-none resize-none leading-relaxed"></textarea>
+                      class="w-full bg-transparent p-3 text-xs sm:text-sm font-mono text-primary placeholder-gray-500 focus:outline-none resize-none leading-relaxed token-masked"
+                      style="-webkit-text-security: disc;"></textarea>
           </div>
           <p class="text-[11px] text-muted mt-1.5 flex items-center gap-1">
             <span class="material-symbols-outlined text-xs">info</span>

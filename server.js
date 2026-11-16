@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 
 const app = express();
@@ -70,18 +71,24 @@ const ALLOWED_STATIC_FILES = new Set([
   'sw.js'
 ]);
 
+function resolveStaticPath(filename) {
+  const publicPath = path.join(__dirname, 'public', filename);
+  if (fs.existsSync(publicPath)) return publicPath;
+  return path.join(__dirname, filename);
+}
+
 // Block access to sensitive files, source code, and hidden dotfiles
 app.use((req, res, next) => {
   const reqPath = decodeURIComponent(req.path).replace(/^\/+/, '').toLowerCase();
 
   // Root path serves index.html
   if (!reqPath || reqPath === 'index.html') {
-    return res.sendFile(path.join(__dirname, 'index.html'));
+    return res.sendFile(resolveStaticPath('index.html'));
   }
 
   // Check if static file is in allowed whitelist
   if (ALLOWED_STATIC_FILES.has(reqPath)) {
-    return res.sendFile(path.join(__dirname, reqPath));
+    return res.sendFile(resolveStaticPath(reqPath));
   }
 
   // Block any attempts to fetch server files, package manifests, git or dotfiles

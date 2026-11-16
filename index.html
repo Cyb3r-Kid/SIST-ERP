@@ -126,7 +126,7 @@
           <div id="statusMessage" class="hidden"></div>
 
           <!-- Session Token Input Form -->
-          <form onsubmit="event.preventDefault(); handleTokenLoginSubmit();" class="space-y-4">
+          <form id="tokenLoginForm" onsubmit="event.preventDefault(); handleTokenLoginSubmit(event);" class="space-y-4">
             <div>
               <div class="flex items-center justify-between mb-1.5">
                 <label for="sessionToken" class="block text-xs font-semibold text-secondary uppercase tracking-wider">
@@ -142,7 +142,8 @@
               <div class="relative glass-input rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20">
                 <textarea id="sessionToken" rows="3" placeholder="Paste your Access-Token from erp.sathyabama.ac.in here..."
                           spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" required
-                          class="w-full bg-transparent p-3 text-xs sm:text-sm font-mono text-primary placeholder-gray-500 focus:outline-none resize-none leading-relaxed"></textarea>
+                          class="w-full bg-transparent p-3 text-xs sm:text-sm font-mono text-primary placeholder-gray-500 focus:outline-none resize-none leading-relaxed token-masked"
+                          style="-webkit-text-security: disc;"></textarea>
               </div>
               <p class="text-[11px] text-muted mt-1.5 flex items-center gap-1">
                 <span class="material-symbols-outlined text-xs">info</span>

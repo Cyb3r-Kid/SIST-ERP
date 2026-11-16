@@ -3,7 +3,8 @@
   "regions": ["bom1"],
   "functions": {
     "api/index.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "public/**,index.html,styles.css,app.js,portal-api.js,sw.js,favicon.*,manifest.json"
     }
   },
   "rewrites": [
@@ -13,6 +14,10 @@
     },
     {
       "source": "/api/(.*)",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/health",
       "destination": "/api/index.js"
     }
   ]
